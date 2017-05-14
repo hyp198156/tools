@@ -1,0 +1,153 @@
+# coding:utf-8
+import socket
+import paramiko
+import sys
+import nmap
+import threading
+import os
+import Queue
+import time
+import multiprocessing
+import datetime
+import requests
+import urllib
+from HTMLParser import HTMLParser
+import re
+socket.setdefaulttimeout(60)
+
+
+
+# 扫描有多少个主机up
+class P_Nmap(object):
+    def __init__(self, i):
+        self.hostlist = []
+        self.network = None
+        self.i = i
+
+    def scan_host(self):
+        nm = nmap.PortScanner()
+        global host_q
+        global q
+        if not host_q.empty():
+            net = host_q.get()
+            self.network = net
+        nm.scan(hosts=self.i, arguments='-v sn')
+        hosts_list = [(x, nm[x]['status']['state']) for x in nm.all_hosts()]
+        for host, status in hosts_list:
+            if status == 'up':
+                result = ('{0}:{1}'.format(host, status))
+                result = result + '\n'
+                self.hostlist.append(result)
+        self.write_result()
+
+    def write_result(self):
+        global q
+        global host_q
+        try:
+            if not os.path.exists('scan_host'):
+                os.mkdir('scan_host')
+            path = os.getcwd()
+            path = os.path.join(path, 'scan_host')
+            path = os.path.join(path, 'scan_info.log')
+            filename = path
+            count_result = '%s： 网段可用IP统计数量为： ' % self.i + str(len(self.hostlist)) + '\n'
+            try:
+                f = open(filename, 'a')
+                print count_result
+                f.write(count_result)
+                f.write('__________________ \n')
+                f.writelines(self.hostlist)
+                f.flush()
+
+            except IOError as e:
+                print e
+            finally:
+                f.close()
+        except EOFError as e:
+            print 'wirte error ......'
+
+
+# 多线程处理
+
+def main_scan(i):
+    p = P_Nmap(i)
+    p.scan_host()
+
+
+class mythread(threading.Thread):
+    def __init__(self, func):
+        threading.Thread.__init__(self)
+        self.func = func
+
+    def run(self):
+        self.func
+
+
+class MyHTMLParser(HTMLParser):
+    def __init__(self):
+        HTMLParser.__init__(self)
+        self.flag = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'div':
+            for name, value in attrs:
+                # print name,value
+                if name == 'class' and value == 'ip_text':
+                    self.flag = 1
+
+    def handle_endtag(self, tag):
+        if tag == 'div':
+            self.flag = 0
+
+    def handle_data(self, data):
+        if self.flag == 1:
+            # self.flag = 0
+            print data
+
+
+if __name__ == '__main__':
+    count=1
+    print 'start time ....', time.strftime('%H:%M:%S')
+    print '服务器公网地址检查,正确的公网地址是这个 %s 特别指定的服务器除外。。。。请检查是否正确' % ('xx.xx.xx.xx')
+    parser = MyHTMLParser()
+    try:
+        html = urllib.urlopen('http://www.ipip.net').read()
+        parser.feed(html)
+    except :
+        print 'http://www.ipip.net 网站打开异常。。。 '
+    time.sleep(2)
+    sys.exit('okkk')
+# 这里写我们要扫描的网段，以逗号分隔
+    hostlist = ['172.16.0.0/18', '192.168.200.0/24', '172.16.10.0/24','172.16.11.0/24']
+    result = []
+    q = Queue.Queue()  # 放需要扫描的结果
+    host_q = Queue.Queue()  # 放需要扫描的网段
+    for i in hostlist:
+        # mesg = "%s" % (i)
+        # result.append(pool.apply_async(main_scan, (mesg,)))
+        process = multiprocessing.Process(target=main_scan, args=(i,))
+        process.start()
+        result.append(process)
+    for res in result:
+        res.join()
+
+    print '跨机房网络检查。。。。。。。。。'
+    hostlist_1=['172.16.70.1','114.114.114.114','wwww.sina.com.cn']
+    result = []
+    q = Queue.Queue()  # 放需要扫描的结果
+    host_q = Queue.Queue()  # 放需要扫描的网段
+    for i in hostlist_1:
+        process = multiprocessing.Process(target=main_scan, args=(i,))
+        process.start()
+        result.append(process)
+    for res in result:
+        res.join()
+
+
+
+
+print 'end time .......',time.strftime('%H:%M:%S')
+
+
+
+
